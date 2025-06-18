@@ -7,8 +7,12 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
+        try:
+            await websocket.accept()
+            self.active_connections.append(websocket)
+        except RuntimeError as e:
+            print("WebSocket accept failed:", e)
+
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)

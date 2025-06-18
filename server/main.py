@@ -1,14 +1,14 @@
-from fastapi import FastAPI
-import uvicorn
 import os
 from dotenv import load_dotenv
 
-from src.routes.chat import chat
-load_dotenv()
+# Load .env before any other imports
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
+from fastapi import FastAPI
+import uvicorn
+from server.src.routes.chat import chat
 api = FastAPI()
-
-api.include_router(chat)  # ✅ Include chat router
+api.include_router(chat)
 
 @api.get("/test")
 async def root():

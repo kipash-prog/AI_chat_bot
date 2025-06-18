@@ -1,11 +1,8 @@
-from fastapi import WebSocket, status, Query
-from typing import Optional
+# filepath: c:\Users\HP\fullstack-ai-chatbot\server\src\ws_socket\utils.py
+from fastapi import WebSocket, Query, HTTPException, status
 
-async def get_token(
-    websocket: WebSocket,
-    token: Optional[str] = Query(None),
-):
-    if token is None or token == "":
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-
+async def get_token(websocket: WebSocket, token: str = Query(None)):
+    if not token:
+        print("No token provided!")
+        
     return token
