@@ -1,21 +1,24 @@
 import os
+import json
+import redis.asyncio as redis
 from dotenv import load_dotenv
 
-# Load the .env file explicitly from the current directory (server/)
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path)
+load_dotenv()
 
-class Redis():
+class Redis:
     def __init__(self):
-        self.REDIS_URL = os.environ['REDIS_URL']
-        self.REDIS_PASSWORD = os.environ['REDIS_PASSWORD']
-        self.REDIS_USER = os.environ['REDIS_USER']
-        # Since your REDIS_URL in .env already has the protocol and user info, you may want to adjust this line
-        # If REDIS_URL already contains everything, use it directly:
-        self.connection_url = self.REDIS_URL
-        # Or if you want to build from parts, adjust accordingly
+        self.connection_url = os.getenv("REDIS_URL")
 
     async def create_connection(self):
-        import redis.asyncio as aioredis
-        self.connection = aioredis.from_url(self.connection_url, db=0)
-        return self.connection
+        return redis.from_url(self.connection_url, decode_responses=True)
+
+    async def save_json(self, key: str, data: dict, expire_seconds: int = 3600):
+        conn = await self.create_connection()
+        await conn.set(key, json.dumps(data), ex=expire_seconds)
+
+    async def get_json(self, key: str):
+        conn = await self.create_connection()
+        value = await conn.get(key)
+        if value:
+            return json.loads(value)
+        return None

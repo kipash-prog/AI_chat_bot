@@ -8,7 +8,7 @@ from fastapi import FastAPI
 import uvicorn
 from server.src.routes.chat import chat
 api = FastAPI()
-api.include_router(chat)
+api.include_router(chat, prefix="")
 
 @api.get("/test")
 async def root():

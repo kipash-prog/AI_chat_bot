@@ -1,50 +1,45 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status
-from fastapi.responses import JSONResponse
-
-from ..redis.producer import Producer
-from ..redis.config import Redis
-from server.src.socket.utils import get_token
-from server.src.socket.connection import ConnectionManager
+from fastapi import APIRouter, Request, HTTPException
+from pydantic import BaseModel
+import uuid
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
+from server.src.schema.chat import Chat
+from server.src.redis.config import Redis
 
 chat = APIRouter()
-manager = ConnectionManager()
-redis = Redis()
+redis = Redis()  # Ensure Redis is instantiated properly here
+
+
+# token route
+@chat.post("/token")
+async def token_generator(name: str):
+    if not name:
+        raise HTTPException(status_code=400, detail={"loc": "name", "msg": "Enter a valid name"})
+
+    token = str(uuid.uuid4())
+    chat_session = Chat(token=token, messages=[], name=name)
+
+    redis_client = Redis()
+    await redis_client.save_json(token, chat_session.dict(), expire_seconds=3600)
+
+    return chat_session.dict()
+
 
 @chat.websocket("/chat")
-async def websocket_endpoint(websocket: WebSocket, token: str = Depends(get_token)):
-    # Check if token is provided
+async def websocket_chat(websocket: WebSocket, token: str = Query(None)):
     if not token:
-        # Close connection with policy violation code
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # Accept the websocket connection here exactly once
+    session = await redis.get_json(token)
+    if not session:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await websocket.accept()
-
-    # Create Redis connection and producer
-    redis_client = await redis.create_connection()
-    producer = Producer(redis_client)
-
-    # Connect websocket in your connection manager
-    await manager.connect(websocket)
 
     try:
         while True:
-            # Receive text message from client
             data = await websocket.receive_text()
-            print(f"Received from client: {data}")
-
-            # Prepare stream data with token as key
-            stream_data = {token: data}
-
-            # Add message to Redis stream
-            message_id = await producer.add_to_stream(stream_data, "message_channel")
-            print(f"Message id {message_id} added to message_channel stream")
-
-            # Send a personal response to client (simulate GPT response)
-            await manager.send_personal_message(f"Response: Simulating response from the GPT service", websocket)
-
+            await websocket.send_text(f"Echo: {data}")
     except WebSocketDisconnect:
-        # Handle websocket disconnection cleanly
-        manager.disconnect(websocket)
         print("Client disconnected")
