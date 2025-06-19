@@ -8,7 +8,6 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket):
         try:
-            await websocket.accept()
             self.active_connections.append(websocket)
         except RuntimeError as e:
             print("WebSocket accept failed:", e)
