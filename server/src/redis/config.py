@@ -12,9 +12,11 @@ class Redis:
     async def create_connection(self):
         return redis.from_url(self.connection_url, decode_responses=True)
 
-    async def save_json(self, key: str, data: dict, expire_seconds: int = 3600):
+# redis/config.py
+
+    async def save_json(self, key: str, data: dict, ex: int = 3600):
         conn = await self.create_connection()
-        await conn.set(key, json.dumps(data), ex=expire_seconds)
+        await conn.set(key, json.dumps(data), ex=ex)  # use ex here
 
     async def get_json(self, key: str):
         conn = await self.create_connection()

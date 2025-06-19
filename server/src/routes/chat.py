@@ -1,45 +1,61 @@
-from fastapi import APIRouter, Request, HTTPException
-from pydantic import BaseModel
 import uuid
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, status
 from server.src.schema.chat import Chat
 from server.src.redis.config import Redis
+from server.src.socket.connection import ConnectionManager
+from server.src.socket.utils import get_token   # leaves logging / query‑param parsing to util
 
 chat = APIRouter()
-redis = Redis()  # Ensure Redis is instantiated properly here
+redis = Redis()
+manager = ConnectionManager()
 
-
-# token route
+# ─────────────────────────── TOKEN ENDPOINT ────────────────────────────
 @chat.post("/token")
 async def token_generator(name: str):
-    if not name:
-        raise HTTPException(status_code=400, detail={"loc": "name", "msg": "Enter a valid name"})
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="Enter a valid name")
 
     token = str(uuid.uuid4())
-    chat_session = Chat(token=token, messages=[], name=name)
+    session = Chat(token=token, name=name, messages=[])
 
-    redis_client = Redis()
-    await redis_client.save_json(token, chat_session.dict(), expire_seconds=3600)
+    # save session JSON (1‑hour TTL)
+    await redis.save_json(token, session.dict(), ex=3600)
+    return session
 
-    return chat_session.dict()
-
-
+# ────────────────────────── WEBSOCKET ENDPOINT ──────────────────────────
 @chat.websocket("/chat")
-async def websocket_chat(websocket: WebSocket, token: str = Query(None)):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str = Query(None)       # pull ?token=… directly
+):
+    # 1. quick reject if no token
     if not token:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # 2. check token exists in Redis
     session = await redis.get_json(token)
     if not session:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # 3. accept connection once
     await websocket.accept()
+    await manager.connect(websocket)
 
+    # 4. main receive / send loop
     try:
         while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(f"Echo: {data}")
+            incoming = await websocket.receive_text()
+            print(f"[{token}] {incoming}")
+
+            # push into Redis Stream (example)
+            conn = await redis.create_connection()
+            await conn.xadd("message_channel", {"token": token, "msg": incoming})
+
+            # echo / simulate GPT
+            await websocket.send_text("Response: Simulated GPT reply")
+
     except WebSocketDisconnect:
+        await manager.disconnect(websocket)
         print("Client disconnected")
