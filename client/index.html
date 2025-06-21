@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Chatbot</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+    }
+    #chat {
+      border: 1px solid #ccc;
+      height: 400px;
+      padding: 10px;
+      overflow-y: auto;
+      background: #fff;
+      white-space: pre-wrap;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+    .message {
+      margin-bottom: 15px;
+      max-width: 80%;
+    }
+    .message.you {
+      text-align: right;
+      margin-left: auto;
+      color: #00529b;
+    }
+    .message.bot {
+      text-align: left;
+      margin-right: auto;
+      color: #4b4b4b;
+    }
+    #inputContainer {
+      display: flex;
+    }
+    #inputMessage {
+      flex: 1;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #sendBtn {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-left: 8px;
+      background-color: #00529b;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #sendBtn:disabled {
+      background-color: #999;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+<h1>AI Chatbot</h1>
+<div id="chat"></div>
+
+<div id="inputContainer">
+  <input id="inputMessage" type="text" placeholder="Type your message..." autocomplete="off" />
+  <button id="sendBtn" disabled>Send</button>
+</div>
+
+<script>
+  // Replace with your FastAPI server address
+  const API_BASE = "http://127.0.0.1:3500";
+
+  let token = null;
+  let ws = null;
+
+  const chatEl = document.getElementById('chat');
+  const inputEl = document.getElementById('inputMessage');
+  const sendBtn = document.getElementById('sendBtn');
+
+  function addMessage(text, sender) {
+    const div = document.createElement('div');
+    div.classList.add('message', sender);
+    div.textContent = (sender === 'you' ? "You: " : "Bot: ") + text;
+    chatEl.appendChild(div);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  async function fetchToken() {
+    const res = await fetch(`${API_BASE}/token?name=guest`);
+    const data = await res.json();
+    return data.token;
+  }
+
+  function setupWebSocket() {
+    ws = new WebSocket(`ws://127.0.0.1:3500/chat?token=${token}`);
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+      sendBtn.disabled = false;
+    };
+
+    ws.onmessage = (event) => {
+      const botResponse = event.data;
+      addMessage(botResponse, 'bot');
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket closed");
+      sendBtn.disabled = true;
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      sendBtn.disabled = true;
+    };
+  }
+
+  async function init() {
+    token = await fetchToken();
+    setupWebSocket();
+  }
+
+  sendBtn.onclick = () => {
+    const message = inputEl.value.trim();
+    if (!message) return;
+
+    addMessage(message, 'you');
+    ws.send(message);
+    inputEl.value = '';
+    inputEl.focus();
+  };
+
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !sendBtn.disabled) {
+      sendBtn.click();
+    }
+  });
+
+  init();
+</script>
+
+</body>
+</html>
